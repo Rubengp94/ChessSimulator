@@ -42,7 +42,7 @@ namespace ChessEngine
                         var validMoves = piece.GetValidMoves(board);
                         foreach (var move in validMoves)
                         {
-                            // Mover la pieza temporalmente
+                            // Simular el movimiento para verificar si saca al rey del jaque
                             Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
 
                             bool stillInCheck = IsCheck(isWhite);

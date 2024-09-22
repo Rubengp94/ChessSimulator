@@ -46,11 +46,19 @@ namespace ChessEngine
             var captureMoves = IsWhite ? MasterTables.PawnCaptureMoves["PawnWhite"] : MasterTables.PawnCaptureMoves["PawnBlack"];
             foreach (var captureMove in captureMoves)
             {
-                Position diagonal = new Position(CurrentPosition.Row + captureMove.Item1, CurrentPosition.Column + captureMove.Item2);
-                if (board.IsPositionValid(diagonal) && board.IsPositionOccupiedByEnemyPiece(diagonal, IsWhite))
+                Position diagonal = new Position(CurrentPosition.Row + direction, CurrentPosition.Column + captureMove.Item2); // Solo las diagonales de captura
+                if (board.IsPositionValid(diagonal))
                 {
-                    validMoves.Add(new Move(CurrentPosition, diagonal));
-                    Console.WriteLine($"Captura diagonal a {diagonal.Row}, {diagonal.Column}");
+                    Console.WriteLine($"Evaluando captura en diagonal a {diagonal.Row}, {diagonal.Column}");
+                    if (board.IsPositionOccupiedByEnemyPiece(diagonal, IsWhite))
+                    {
+                        validMoves.Add(new Move(CurrentPosition, diagonal));
+                        Console.WriteLine($"Captura diagonal válida hacia {diagonal.Row}, {diagonal.Column}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"No hay pieza enemiga en {diagonal.Row}, {diagonal.Column}");
+                    }
                 }
             }
 
