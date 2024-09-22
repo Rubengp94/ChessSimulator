@@ -12,9 +12,7 @@ public class Queen : Piece
 
         foreach (var movement in movements)
         {
-            int newRow = CurrentPosition.Row + movement.Item1;
-            int newCol = CurrentPosition.Column + movement.Item2;
-            validMoves.AddRange(GetMovesInLine(board, newRow, newCol));
+            validMoves.AddRange(GetMovesInLine(board, movement.Item1, movement.Item2));
         }
 
         return validMoves;

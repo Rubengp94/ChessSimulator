@@ -9,6 +9,12 @@ namespace ChessEngine
         public string PieceType { get; private set; }  // Tipo de pieza (Reina, Torre, etc.)
         public Position CurrentPosition { get; set; }  // Posición actual de la pieza
 
+        // Método que se llama después de mover la pieza
+        public virtual void AfterMove()
+        {
+            // El método puede ser sobrescrito por piezas específicas si es necesario
+        }
+
         protected Piece(bool isWhite, string pieceType, Position startPosition)
         {
             if (startPosition == null)

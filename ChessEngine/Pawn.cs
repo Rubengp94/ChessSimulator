@@ -6,6 +6,7 @@ namespace ChessEngine
     public class Pawn : Piece
     {
         public bool CanBeCapturedEnPassant { get; set; } = false;  // Indica si este peón puede ser capturado al paso
+        private bool hasMoved = false;  // Indica si el peón ha sido movido
 
         public Pawn(bool isWhite, Position startPosition)
             : base(isWhite, "Pawn", startPosition) { }
@@ -13,40 +14,31 @@ namespace ChessEngine
         public override List<Move> GetValidMoves(Board board)
         {
             List<Move> validMoves = new List<Move>();
-            int direction = IsWhite ? -1 : 1;  // Blancas suben (-1), negras bajan (+1)
+            int direction = IsWhite ? 1 : -1;  // Blancas suben (+1), negras bajan (-1)
 
             Console.WriteLine($"Evaluando movimientos válidos para peón en {CurrentPosition.Row}, {CurrentPosition.Column}");
 
             // Movimiento hacia adelante (sin captura)
-            var forwardMoves = IsWhite ? MasterTables.PieceMovementTable["PawnWhite"] : MasterTables.PieceMovementTable["PawnBlack"];
-            foreach (var move in forwardMoves)
+            Position forward = new Position(CurrentPosition.Row + direction, CurrentPosition.Column);
+            if (board.IsPositionValid(forward) && !board.IsPositionOccupied(forward))
             {
-                Position forward = new Position(CurrentPosition.Row + move.Item1, CurrentPosition.Column);
-                if (board.IsPositionValid(forward) && !board.IsPositionOccupied(forward))
-                {
-                    validMoves.Add(new Move(CurrentPosition, forward));
-                    Console.WriteLine($"Movimiento hacia adelante a {forward.Row}, {forward.Column}");
-                }
+                validMoves.Add(new Move(CurrentPosition, forward));
+                Console.WriteLine($"Movimiento hacia adelante a {forward.Row}, {forward.Column}");
             }
 
             // Movimiento inicial de dos casillas hacia adelante
-            if ((IsWhite && CurrentPosition.Row == 1) || (!IsWhite && CurrentPosition.Row == 6))
+            if (!hasMoved && ((IsWhite && CurrentPosition.Row == 1) || (!IsWhite && CurrentPosition.Row == 6)))
             {
-                var initialMoves = IsWhite ? MasterTables.InitialPawnMoves["PawnWhite"] : MasterTables.InitialPawnMoves["PawnBlack"];
-                foreach (var move in initialMoves)
-                {
-                    Position doubleForward = new Position(CurrentPosition.Row + move.Item1, CurrentPosition.Column);
-                    Position singleForward = new Position(CurrentPosition.Row + direction, CurrentPosition.Column);  // Casilla intermedia
+                Position doubleForward = new Position(CurrentPosition.Row + 2 * direction, CurrentPosition.Column);
+                Position singleForward = new Position(CurrentPosition.Row + direction, CurrentPosition.Column);  // Casilla intermedia
 
-                    // Asegurarse de que ambas posiciones (la casilla intermedia y la de destino) estén libres
-                    if (board.IsPositionValid(doubleForward) &&
-                        !board.IsPositionOccupied(singleForward) &&
-                        !board.IsPositionOccupied(doubleForward))
-                    {
-                        validMoves.Add(new Move(CurrentPosition, doubleForward));
-                        CanBeCapturedEnPassant = true;  // Permitir captura al paso solo tras este movimiento
-                        Console.WriteLine($"Movimiento inicial doble a {doubleForward.Row}, {doubleForward.Column}");
-                    }
+                if (board.IsPositionValid(doubleForward) &&
+                    !board.IsPositionOccupied(singleForward) &&
+                    !board.IsPositionOccupied(doubleForward))
+                {
+                    validMoves.Add(new Move(CurrentPosition, doubleForward));
+                    CanBeCapturedEnPassant = true;  // Permitir captura al paso solo tras este movimiento
+                    Console.WriteLine($"Movimiento inicial doble a {doubleForward.Row}, {doubleForward.Column}");
                 }
             }
 
@@ -71,7 +63,10 @@ namespace ChessEngine
             return validMoves;
         }
 
-
+        public override void AfterMove()
+        {
+            hasMoved = true;  // Indicar que el peón ha sido movido
+        }
 
         private void HandleEnPassantCapture(Board board, List<Move> validMoves, int direction)
         {
@@ -106,7 +101,7 @@ namespace ChessEngine
             List<Move> promotionMoves = new List<Move>();
             foreach (var move in moves)
             {
-                if ((IsWhite && move.End.Row == 0) || (!IsWhite && move.End.Row == 7))
+                if ((IsWhite && move.End.Row == 7) || (!IsWhite && move.End.Row == 0))
                 {
                     promotionMoves.Add(move);  // Solo agregamos el movimiento si requiere promoción
                 }
@@ -127,3 +122,6 @@ namespace ChessEngine
         }
     }
 }
+
+
+

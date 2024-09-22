@@ -19,16 +19,30 @@ namespace ChessEngine
                 int newCol = CurrentPosition.Column + move.Item2;
                 Position newPos = new Position(newRow, newCol);
 
-                if (board.IsPositionValid(newPos) && !board.IsPositionOccupiedByEnemyPiece(newPos, IsWhite))
+                if (board.IsPositionValid(newPos))
                 {
-                    validMoves.Add(new Move(CurrentPosition, newPos));
+                    // Permitir capturas si la casilla está ocupada por una pieza enemiga
+                    if (!board.IsPositionOccupied(newPos) || board.IsPositionOccupiedByEnemyPiece(newPos, IsWhite))
+                    {
+                        validMoves.Add(new Move(CurrentPosition, newPos));
+                        Console.WriteLine($"Movimiento válido para caballo hacia {newPos.Row}, {newPos.Column}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Posición {newPos.Row}, {newPos.Column} ocupada por una pieza aliada.");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"Posición {newPos.Row}, {newPos.Column} fuera de los límites.");
                 }
             }
 
             // Depuración
-            Console.WriteLine($"Knight ({CurrentPosition.Row}, {CurrentPosition.Column}) movimientos válidos: {validMoves.Count}");
+            Console.WriteLine($"Caballo en ({CurrentPosition.Row}, {CurrentPosition.Column}) movimientos válidos: {validMoves.Count}");
 
             return validMoves;
         }
     }
 }
+
