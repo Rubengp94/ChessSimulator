@@ -6,7 +6,7 @@ namespace ChessEngine
 {
     public class ChessAI
     {
-        private const int MaxDepth = 1;
+        private const int MaxDepth = 6;  // Mantener la profundidad de 4 para una evaluación más precisa
         private Board board;
         private GameStateManager gameStateManager;
 
@@ -24,6 +24,10 @@ namespace ChessEngine
             List<Move> allMoves = GetAllValidMoves(isWhite);
             Debug.WriteLine($"Total de movimientos válidos para {(isWhite ? "blancas" : "negras")}: {allMoves.Count}");
 
+            // Ordenar los movimientos, priorizando las capturas
+            allMoves = SortMovesBySignificance(allMoves);
+
+            // Revisamos todos los movimientos válidos generados por la IA
             foreach (var move in allMoves)
             {
                 Piece piece = board.GetPieceAtPosition(move.Start.Row, move.Start.Column);
@@ -36,13 +40,15 @@ namespace ChessEngine
                 Debug.WriteLine($"Evaluando movimiento de {piece.PieceType} desde ({move.Start.Row}, {move.Start.Column}) a ({move.End.Row}, {move.End.Column})");
 
                 // Mover la pieza temporalmente
-                Piece capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                piece.AfterMove();  // Actualizar el estado de la pieza si es necesario
 
-                // Evaluar el movimiento usando Minimax
-                int moveScore = Minimax(MaxDepth, int.MinValue, int.MaxValue, !isWhite);
+                // Evaluar el movimiento usando Minimax con Quiescence Search
+                int moveScore = QuiescenceSearch(MaxDepth, int.MinValue, int.MaxValue, !isWhite);
 
                 // Deshacer el movimiento
                 board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                piece.AfterMoveUndo();  // Revertir el estado de `hasMoved`
 
                 // Restaurar la pieza capturada
                 if (capturedPiece != null)
@@ -50,6 +56,14 @@ namespace ChessEngine
                     board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
                 }
 
+                // Añadir el valor de la pieza capturada al puntaje
+                if (capturedPiece != null)
+                {
+                    moveScore += GetPieceValue(capturedPiece);
+                    Debug.WriteLine($"Movimiento de captura de {capturedPiece.PieceType}, aumentando puntaje en {GetPieceValue(capturedPiece)}");
+                }
+
+                // Actualizar el mejor movimiento si encontramos un movimiento con mejor puntaje
                 if (moveScore > bestScore)
                 {
                     bestScore = moveScore;
@@ -66,6 +80,40 @@ namespace ChessEngine
             return bestMove;
         }
 
+        internal int QuiescenceSearch(int depth, int alpha, int beta, bool isMaximizingPlayer)
+        {
+            // Evaluación estática del tablero
+            int eval = EvaluateBoard();
+            if (eval >= beta) return beta;
+            if (eval > alpha) alpha = eval;
+
+            // Obtener movimientos de captura
+            List<Move> captureMoves = GetCaptureMoves(isMaximizingPlayer);
+            if (depth == 0 || captureMoves.Count == 0) return eval;
+
+            // Explorar sólo movimientos de captura
+            foreach (var move in captureMoves)
+            {
+                Piece piece = board.GetPieceAtPosition(move.Start.Row, move.Start.Column);
+                if (piece == null) continue;
+
+                // Mover la pieza temporalmente
+                Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                piece.AfterMove();
+
+                int score = -QuiescenceSearch(depth - 1, -beta, -alpha, !isMaximizingPlayer);
+
+                // Deshacer el movimiento
+                board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                piece.AfterMoveUndo();
+                if (capturedPiece != null) board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
+
+                if (score >= beta) return beta;
+                if (score > alpha) alpha = score;
+            }
+            return alpha;
+        }
+
         internal int Minimax(int depth, int alpha, int beta, bool isMaximizingPlayer)
         {
             if (depth == 0 || gameStateManager.IsGameOver())
@@ -74,6 +122,7 @@ namespace ChessEngine
             }
 
             List<Move> moves = GetAllValidMoves(isMaximizingPlayer);
+            bool isInCheck = gameStateManager.IsCheck(isMaximizingPlayer);  // Verificar si está en jaque
 
             if (isMaximizingPlayer)
             {
@@ -84,12 +133,14 @@ namespace ChessEngine
                     if (piece == null) continue;
 
                     // Mover la pieza temporalmente
-                    Piece capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                    Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                    piece.AfterMove();  // Actualizar el estado de movimiento
 
                     int eval = Minimax(depth - 1, alpha, beta, false);
 
                     // Deshacer el movimiento
                     board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                    piece.AfterMoveUndo();  // Revertir estado de `hasMoved`
 
                     // Restaurar la pieza capturada
                     if (capturedPiece != null)
@@ -97,9 +148,21 @@ namespace ChessEngine
                         board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
                     }
 
+                    // Si está en jaque, priorizamos movimientos que lo saquen del jaque
+                    if (isInCheck && !gameStateManager.IsCheck(isMaximizingPlayer))
+                    {
+                        eval += 1000;  // Bonificación por salir del jaque
+                    }
+
+                    // Priorizar capturas significativas
+                    if (capturedPiece != null)
+                    {
+                        eval += GetPieceValue(capturedPiece);
+                    }
+
                     maxEval = Math.Max(maxEval, eval);
                     alpha = Math.Max(alpha, eval);
-                    if (beta <= alpha) break;
+                    if (beta <= alpha) break;  // Poda alfa-beta
                 }
                 return maxEval;
             }
@@ -112,12 +175,14 @@ namespace ChessEngine
                     if (piece == null) continue;
 
                     // Mover la pieza temporalmente
-                    Piece capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                    Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                    piece.AfterMove();  // Actualizar el estado de movimiento
 
                     int eval = Minimax(depth - 1, alpha, beta, true);
 
                     // Deshacer el movimiento
                     board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                    piece.AfterMoveUndo();  // Revertir estado de `hasMoved`
 
                     // Restaurar la pieza capturada
                     if (capturedPiece != null)
@@ -125,9 +190,21 @@ namespace ChessEngine
                         board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
                     }
 
+                    // Si está en jaque, priorizamos movimientos que lo saquen del jaque
+                    if (isInCheck && !gameStateManager.IsCheck(isMaximizingPlayer))
+                    {
+                        eval -= 1000;  // Penalización por permanecer en jaque
+                    }
+
+                    // Penalizar la pérdida de piezas importantes
+                    if (capturedPiece != null)
+                    {
+                        eval -= GetPieceValue(capturedPiece);
+                    }
+
                     minEval = Math.Min(minEval, eval);
                     beta = Math.Min(beta, eval);
-                    if (beta <= alpha) break;
+                    if (beta <= alpha) break;  // Poda alfa-beta
                 }
                 return minEval;
             }
@@ -140,10 +217,17 @@ namespace ChessEngine
             {
                 for (int col = 0; col < 8; col++)
                 {
-                    Piece piece = board.GetPieceAtPosition(row, col);
+                    Piece? piece = board.GetPieceAtPosition(row, col);
                     if (piece != null)
                     {
-                        score += GetPieceValue(piece);
+                        int pieceValue = GetPieceValue(piece);
+                        score += piece.IsWhite ? pieceValue : -pieceValue;
+
+                        // Penalizar al jugador si está en jaque
+                        if (piece.PieceType == "King" && gameStateManager.IsCheck(piece.IsWhite))
+                        {
+                            score += piece.IsWhite ? -500 : 500;  // Penaliza mucho si el rey está en jaque
+                        }
                     }
                 }
             }
@@ -171,17 +255,44 @@ namespace ChessEngine
             {
                 for (int col = 0; col < 8; col++)
                 {
-                    Piece piece = board.GetPieceAtPosition(row, col);
+                    Piece? piece = board.GetPieceAtPosition(row, col);
                     if (piece != null && piece.IsWhite == isWhite)
                     {
-                        Debug.WriteLine($"Generando movimientos para {piece.PieceType} en ({row}, {col})");
                         List<Move> validMoves = piece.GetValidMoves(board);
                         moves.AddRange(validMoves);
                     }
                 }
             }
-            Debug.WriteLine($"Total de movimientos válidos generados para {(isWhite ? "blancas" : "negras")}: {moves.Count}");
+            return moves;
+        }
+
+        private List<Move> GetCaptureMoves(bool isWhite)
+        {
+            List<Move> captureMoves = new List<Move>();
+            foreach (var move in GetAllValidMoves(isWhite))
+            {
+                if (board.IsPositionOccupiedByEnemyPiece(move.End, isWhite))
+                {
+                    captureMoves.Add(move);  // Solo capturas
+                }
+            }
+            return captureMoves;
+        }
+
+        private List<Move> SortMovesBySignificance(List<Move> moves)
+        {
+            // Ordenar los movimientos de captura primero (mayor valor primero)
+            moves.Sort((move1, move2) =>
+            {
+                Piece? piece1 = board.GetPieceAtPosition(move1.End.Row, move1.End.Column);
+                Piece? piece2 = board.GetPieceAtPosition(move2.End.Row, move2.End.Column);
+                int value1 = piece1 != null ? GetPieceValue(piece1) : 0;
+                int value2 = piece2 != null ? GetPieceValue(piece2) : 0;
+                return value2.CompareTo(value1);  // Capturas más valiosas primero
+            });
             return moves;
         }
     }
 }
+
+

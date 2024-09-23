@@ -69,8 +69,9 @@ namespace ChessEngine
 
             Debug.WriteLine($"Pieza {pieceToMove.PieceType} movida a la nueva posición ({endRow}, {endCol})");
 
-            return capturedPiece;
+            return capturedPiece;  // Retornar la pieza capturada si existe
         }
+
 
 
         // Verificar si una posición de tipo `Position` está dentro de los límites del tablero

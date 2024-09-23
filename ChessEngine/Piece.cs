@@ -15,6 +15,12 @@ namespace ChessEngine
             // El método puede ser sobrescrito por piezas específicas si es necesario
         }
 
+        public virtual void AfterMoveUndo()
+        {
+            // En general, no hay nada que revertir para la mayoría de las piezas,
+            // pero las piezas como los peones pueden sobrescribirlo si es necesario.
+        }
+
         protected Piece(bool isWhite, string pieceType, Position startPosition)
         {
             if (startPosition == null)
