@@ -203,14 +203,24 @@ namespace ChessUI
             {
                 if (move.End.Row == filaDestino && move.End.Column == colDestino)
                 {
-                    Debug.WriteLine($"Movimiento válido: {piezaSeleccionada.PieceType} desde ({filaInicio}, {colInicio}) hasta ({filaDestino}, {colDestino})");
-                    return true;  // Movimiento válido
+                    // Verificar si el movimiento deja al jugador en jaque
+                    if (!gameStateManager.IsMoveInCheck(move, isPlayerTurn))
+                    {
+                        Debug.WriteLine($"Movimiento válido: {piezaSeleccionada.PieceType} desde ({filaInicio}, {colInicio}) hasta ({filaDestino}, {colDestino})");
+                        return true;  // Movimiento válido
+                    }
+                    else
+                    {
+                        Debug.WriteLine("Movimiento inválido: dejaría al jugador en jaque.");
+                        return false;  // El movimiento deja al jugador en jaque
+                    }
                 }
             }
 
             Debug.WriteLine($"Movimiento ilegal: {piezaSeleccionada.PieceType} desde ({filaInicio}, {colInicio}) hasta ({filaDestino}, {colDestino})");
             return false;  // Movimiento ilegal
         }
+
 
         private void MakeAIMove()
         {

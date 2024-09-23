@@ -26,6 +26,23 @@ namespace ChessEngine
             return IsSquareUnderAttack(kingPosition, !isWhite);  // Verifica si el rey está bajo ataque
         }
 
+        // Comprueba si un movimiento deja al rey del mismo color en jaque
+        public bool IsMoveInCheck(Move move, bool isWhite)
+        {
+            // Simular el movimiento
+            Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+            bool inCheck = IsCheck(isWhite);  // Verificar si el rey está en jaque después del movimiento
+
+            // Deshacer el movimiento
+            board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+            if (capturedPiece != null)
+            {
+                board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
+            }
+
+            return inCheck;  // Devuelve true si el movimiento deja al rey en jaque
+        }
+
         // Comprueba si hay jaque mate para el jugador dado
         public bool IsCheckMate(bool isWhite)
         {
@@ -42,19 +59,7 @@ namespace ChessEngine
                         var validMoves = piece.GetValidMoves(board);
                         foreach (var move in validMoves)
                         {
-                            // Simular el movimiento para verificar si saca al rey del jaque
-                            Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
-
-                            bool stillInCheck = IsCheck(isWhite);
-
-                            // Deshacer el movimiento
-                            board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
-                            if (capturedPiece != null)
-                            {
-                                board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
-                            }
-
-                            if (!stillInCheck)
+                            if (!IsMoveInCheck(move, isWhite))
                             {
                                 return false;  // Si hay algún movimiento que lo saca del jaque, no es jaque mate
                             }
@@ -79,9 +84,12 @@ namespace ChessEngine
                     if (piece != null && piece.IsWhite == isWhite)
                     {
                         var validMoves = piece.GetValidMoves(board);
-                        if (validMoves.Count > 0)
+                        foreach (var move in validMoves)
                         {
-                            return false;  // Si hay movimientos válidos, no es tablas
+                            if (!IsMoveInCheck(move, isWhite))
+                            {
+                                return false;  // Si hay algún movimiento válido que no deja al rey en jaque, no es tablas
+                            }
                         }
                     }
                 }

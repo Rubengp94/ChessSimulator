@@ -6,7 +6,7 @@ namespace ChessEngine
 {
     public class ChessAI
     {
-        private const int MaxDepth = 6;  // Mantener la profundidad de 4 para una evaluación más precisa
+        private const int MaxDepth = 15;  // Mantener la profundidad para una evaluación más precisa
         private Board board;
         private GameStateManager gameStateManager;
 
@@ -23,6 +23,9 @@ namespace ChessEngine
 
             List<Move> allMoves = GetAllValidMoves(isWhite);
             Debug.WriteLine($"Total de movimientos válidos para {(isWhite ? "blancas" : "negras")}: {allMoves.Count}");
+
+            // Filtrar movimientos que saquen del jaque
+            allMoves = FilterOutMovesThatLeaveInCheck(allMoves, isWhite);
 
             // Ordenar los movimientos, priorizando las capturas
             allMoves = SortMovesBySignificance(allMoves);
@@ -80,6 +83,36 @@ namespace ChessEngine
             return bestMove;
         }
 
+        // Filtrar movimientos que dejan al rey en jaque
+        private List<Move> FilterOutMovesThatLeaveInCheck(List<Move> moves, bool isWhite)
+        {
+            List<Move> safeMoves = new List<Move>();
+
+            foreach (var move in moves)
+            {
+                // Mover la pieza temporalmente
+                Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+
+                // Comprobar si el rey sigue en jaque después del movimiento
+                bool isStillInCheck = gameStateManager.IsCheck(isWhite);
+
+                // Deshacer el movimiento
+                board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                if (capturedPiece != null)
+                {
+                    board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
+                }
+
+                // Solo agregar el movimiento si no deja al rey en jaque
+                if (!isStillInCheck)
+                {
+                    safeMoves.Add(move);
+                }
+            }
+
+            return safeMoves;
+        }
+
         internal int QuiescenceSearch(int depth, int alpha, int beta, bool isMaximizingPlayer)
         {
             // Evaluación estática del tablero
@@ -91,7 +124,7 @@ namespace ChessEngine
             List<Move> captureMoves = GetCaptureMoves(isMaximizingPlayer);
             if (depth == 0 || captureMoves.Count == 0) return eval;
 
-            // Explorar sólo movimientos de captura
+            // Explorar solo movimientos de captura
             foreach (var move in captureMoves)
             {
                 Piece piece = board.GetPieceAtPosition(move.Start.Row, move.Start.Column);
@@ -294,5 +327,6 @@ namespace ChessEngine
         }
     }
 }
+
 
 
