@@ -43,7 +43,7 @@ namespace ChessEngine
             return validMoves;
         }
 
-        // Método para agregar los movimientos de enroque
+        // Método para agregar los movimientos de enroque y mover la torre también
         private List<Move> GetCastlingMoves(Board board)
         {
             List<Move> castlingMoves = new List<Move>();
@@ -51,17 +51,34 @@ namespace ChessEngine
             // Enroque corto (lado del rey)
             if (CanCastle(board, 7, 5, 6))  // Columnas 5 y 6 entre el rey y la torre
             {
-                castlingMoves.Add(new Move(CurrentPosition, new Position(CurrentPosition.Row, 6)));  // El rey se mueve a la columna 6
+                // Mover el rey a la columna 6
+                castlingMoves.Add(new Move(CurrentPosition, new Position(CurrentPosition.Row, 6)));
+
+                // Mover la torre a la columna 5
+                Piece rook = board.GetPieceAtPosition(CurrentPosition.Row, 7);
+                if (rook is Rook && !((Rook)rook).HasMoved)
+                {
+                    castlingMoves.Add(new Move(rook.CurrentPosition, new Position(CurrentPosition.Row, 5)));  // Mover la torre a la columna 5
+                }
             }
 
             // Enroque largo (lado de la reina)
             if (CanCastle(board, 0, 1, 2, 3))  // Columnas 1, 2 y 3 entre el rey y la torre
             {
-                castlingMoves.Add(new Move(CurrentPosition, new Position(CurrentPosition.Row, 2)));  // El rey se mueve a la columna 2
+                // Mover el rey a la columna 2
+                castlingMoves.Add(new Move(CurrentPosition, new Position(CurrentPosition.Row, 2)));
+
+                // Mover la torre a la columna 3
+                Piece rook = board.GetPieceAtPosition(CurrentPosition.Row, 0);
+                if (rook is Rook && !((Rook)rook).HasMoved)
+                {
+                    castlingMoves.Add(new Move(rook.CurrentPosition, new Position(CurrentPosition.Row, 3)));  // Mover la torre a la columna 3
+                }
             }
 
             return castlingMoves;
         }
+
 
         // Verificar si el enroque es posible
         private bool CanCastle(Board board, int rookCol, params int[] emptyCols)
@@ -86,5 +103,6 @@ namespace ChessEngine
         }
     }
 }
+
 
 

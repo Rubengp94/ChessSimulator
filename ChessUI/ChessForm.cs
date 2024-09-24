@@ -203,23 +203,32 @@ namespace ChessUI
             {
                 if (move.End.Row == filaDestino && move.End.Column == colDestino)
                 {
-                    // Verificar si el movimiento deja al jugador en jaque
-                    if (!gameStateManager.IsMoveInCheck(move, isPlayerTurn))
+                    // Verificar si el movimiento es un enroque
+                    if (piezaSeleccionada is King && Math.Abs(colInicio - colDestino) == 2)
                     {
-                        Debug.WriteLine($"Movimiento válido: {piezaSeleccionada.PieceType} desde ({filaInicio}, {colInicio}) hasta ({filaDestino}, {colDestino})");
-                        return true;  // Movimiento válido
+                        // Movimiento de enroque: mover también la torre
+                        if (colDestino == 6) // Enroque corto
+                        {
+                            board.MovePiece(filaInicio, 7, filaInicio, 5);  // Mover la torre
+                        }
+                        else if (colDestino == 2) // Enroque largo
+                        {
+                            board.MovePiece(filaInicio, 0, filaInicio, 3);  // Mover la torre
+                        }
                     }
-                    else
-                    {
-                        Debug.WriteLine("Movimiento inválido: dejaría al jugador en jaque.");
-                        return false;  // El movimiento deja al jugador en jaque
-                    }
+
+                    // Mover la pieza
+                    board.MovePiece(filaInicio, colInicio, filaDestino, colDestino);
+                    Debug.WriteLine($"Movimiento válido: {piezaSeleccionada.PieceType} desde ({filaInicio}, {colInicio}) hasta ({filaDestino}, {colDestino})");
+
+                    return true;  // Movimiento válido
                 }
             }
 
             Debug.WriteLine($"Movimiento ilegal: {piezaSeleccionada.PieceType} desde ({filaInicio}, {colInicio}) hasta ({filaDestino}, {colDestino})");
             return false;  // Movimiento ilegal
         }
+
 
 
         private void MakeAIMove()
