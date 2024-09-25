@@ -46,9 +46,8 @@ namespace ChessEngine
         // Comprueba si hay jaque mate para el jugador dado
         public bool IsCheckMate(bool isWhite)
         {
-            if (!IsCheck(isWhite)) return false;  // Si no está en jaque, no puede ser jaque mate
+            if (!IsCheck(isWhite)) return false;
 
-            // Si el rey está en jaque, verificar si hay algún movimiento que lo pueda sacar de jaque
             for (int row = 0; row < 8; row++)
             {
                 for (int col = 0; col < 8; col++)
@@ -61,14 +60,15 @@ namespace ChessEngine
                         {
                             if (!IsMoveInCheck(move, isWhite))
                             {
-                                return false;  // Si hay algún movimiento que lo saca del jaque, no es jaque mate
+                                return false;  // No es jaque mate si hay un movimiento válido
                             }
                         }
                     }
                 }
             }
-            return true;  // Si ningún movimiento puede sacar al rey del jaque, es jaque mate
+            return true;  // Es jaque mate si no hay movimientos válidos
         }
+
 
         // Comprueba si hay tablas (estancamiento) para el jugador dado
         public bool IsStalemate(bool isWhite)

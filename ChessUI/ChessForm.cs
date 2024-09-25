@@ -127,6 +127,7 @@ namespace ChessUI
 
             Debug.WriteLine($"Button_Click: Coordenadas del botón clickeado - Fila: {row}, Columna: {col}");
 
+            // No hay ninguna pieza seleccionada previamente
             if (selectedPosition == null)
             {
                 Debug.WriteLine("Button_Click: No hay ninguna posición seleccionada previamente.");
@@ -137,6 +138,7 @@ namespace ChessUI
                     return;
                 }
 
+                // Obtener la pieza en la posición seleccionada
                 Piece? piece = board.GetPieceAtPosition(row, col);
                 if (piece != null && piece.IsWhite == isPlayerTurn)
                 {
@@ -151,26 +153,46 @@ namespace ChessUI
             }
             else
             {
+                // Intentar mover la pieza seleccionada
                 Debug.WriteLine($"Button_Click: Intentando mover de ({selectedPosition.Row}, {selectedPosition.Column}) a ({row}, {col})");
 
                 Position startPosition = new Position(selectedPosition.Row, selectedPosition.Column);
                 Position endPosition = new Position(row, col);
 
+                // Validar si las posiciones son válidas en el tablero
                 if (!board.IsPositionValid(startPosition) || !board.IsPositionValid(endPosition))
                 {
                     Debug.WriteLine("Button_Click: Una de las posiciones es inválida.");
                     return;
                 }
 
-                bool esMovimientoLegal = EvaluarMovimiento(selectedPosition.Row, selectedPosition.Column, row, col);
-                Debug.WriteLine($"Button_Click: El movimiento es {(esMovimientoLegal ? "legal" : "ilegal")}.");
-
-                if (esMovimientoLegal)
+                // Verificar si el jugador está en jaque antes de hacer el movimiento
+                if (gameStateManager.IsCheck(isPlayerTurn))
                 {
+                    Debug.WriteLine("Button_Click: El jugador está en jaque. Solo se permiten movimientos que saquen del jaque.");
+
+                    // Verificar si el movimiento saca al jugador del jaque
+                    bool esMovimientoLegal = EvaluarMovimiento(startPosition.Row, startPosition.Column, row, col);
+                    if (!esMovimientoLegal || gameStateManager.IsMoveInCheck(new Move(startPosition, endPosition), isPlayerTurn))
+                    {
+                        Debug.WriteLine("Button_Click: Movimiento ilegal. No puedes salir del jaque con este movimiento.");
+                        return;
+                    }
+                }
+
+                // Evaluar el movimiento normalmente si el jugador no está en jaque
+                bool esMovimientoLegalNormal = EvaluarMovimiento(selectedPosition.Row, selectedPosition.Column, row, col);
+                Debug.WriteLine($"Button_Click: El movimiento es {(esMovimientoLegalNormal ? "legal" : "ilegal")}.");
+
+                if (esMovimientoLegalNormal)
+                {
+                    // Realizar el movimiento y actualizar el gráfico
                     Piece? capturedPiece = board.MovePiece(selectedPosition.Row, selectedPosition.Column, row, col);
                     UpdateBoardGraphics();
 
                     selectedPosition = null;
+
+                    // Verificar el estado del juego (jaque, tablas, jaque mate)
                     CheckGameStatus();
 
                     Debug.WriteLine("Button_Click: Turno del jugador terminado, pasando a la IA.");
@@ -183,6 +205,7 @@ namespace ChessUI
                 }
             }
         }
+
 
 
 
@@ -228,9 +251,29 @@ namespace ChessUI
                         }
                     }
 
+                    // Simular el movimiento y verificar si deja al rey en jaque
+                    Move movimientoSimulado = new Move(new Position(filaInicio, colInicio), new Position(filaDestino, colDestino));
+                    if (gameStateManager.IsMoveInCheck(movimientoSimulado, piezaSeleccionada.IsWhite))
+                    {
+                        Debug.WriteLine("Movimiento ilegal: dejaría al rey en jaque.");
+                        return false;  // Movimiento ilegal ya que deja al rey en jaque
+                    }
+
                     // Mover la pieza
                     board.MovePiece(filaInicio, colInicio, filaDestino, colDestino);
                     Debug.WriteLine($"Movimiento válido: {piezaSeleccionada.PieceType} desde ({filaInicio}, {colInicio}) hasta ({filaDestino}, {colDestino})");
+
+                    // Verificar si el jugador o la IA están en jaque tras el movimiento
+                    if (gameStateManager.IsCheck(!piezaSeleccionada.IsWhite))
+                    {
+                        Debug.WriteLine($"{(piezaSeleccionada.IsWhite ? "Negro" : "Blanco")} está en jaque tras el movimiento.");
+                    }
+
+                    // Verificar si se ha producido jaque mate
+                    if (gameStateManager.IsCheckMate(!piezaSeleccionada.IsWhite))
+                    {
+                        Debug.WriteLine($"{(piezaSeleccionada.IsWhite ? "Negro" : "Blanco")} ha recibido jaque mate.");
+                    }
 
                     return true;  // Movimiento válido
                 }
@@ -239,6 +282,7 @@ namespace ChessUI
             Debug.WriteLine($"Movimiento ilegal: {piezaSeleccionada.PieceType} desde ({filaInicio}, {colInicio}) hasta ({filaDestino}, {colDestino})");
             return false;  // Movimiento ilegal
         }
+
 
 
 
@@ -253,22 +297,43 @@ namespace ChessUI
                 Position blackKingPosition = gameStateManager.GetKingPosition(false);
                 Debug.WriteLine($"Rey blanco en: ({whiteKingPosition.Row}, {whiteKingPosition.Column}), Rey negro en: ({blackKingPosition.Row}, {blackKingPosition.Column})");
 
+                // Obtener el mejor movimiento de la IA
                 Move? aiMove = chessAI.GetBestMove(false);
-                if (aiMove != null)
-                {
-                    Debug.WriteLine($"Moviendo {board.GetPieceAtPosition(aiMove.Start.Row, aiMove.Start.Column)?.PieceType} de ({aiMove.Start.Row}, {aiMove.Start.Column}) a ({aiMove.End.Row}, {aiMove.End.Column})");
 
+                // Si no se encuentra ningún movimiento válido, comprobar si es jaque mate o tablas
+                if (aiMove == null)
+                {
+                    Debug.WriteLine("Error: No se encontró ningún movimiento válido para la IA.");
+
+                    if (gameStateManager.IsCheckMate(false))  // Si es jaque mate para la IA
+                    {
+                        Debug.WriteLine("Jaque mate para la IA.");
+                        EndGame("¡Has ganado por jaque mate!");
+                        return;
+                    }
+                    else if (gameStateManager.IsStalemate(false))  // Si son tablas
+                    {
+                        Debug.WriteLine("La IA no tiene más movimientos, es tablas.");
+                        EndGame("El juego ha terminado en tablas.");
+                        return;
+                    }
+                }
+                else
+                {
+                    // Realizar el movimiento de la IA
+                    Debug.WriteLine($"Moviendo {board.GetPieceAtPosition(aiMove.Start.Row, aiMove.Start.Column)?.PieceType} de ({aiMove.Start.Row}, {aiMove.Start.Column}) a ({aiMove.End.Row}, {aiMove.End.Column})");
                     board.MovePiece(aiMove.Start.Row, aiMove.Start.Column, aiMove.End.Row, aiMove.End.Column);
                     UpdateBoardGraphics();
 
-                    CheckGameStatus(); // Verifica el estado del juego después de que la IA realiza un movimiento
-                }
+                    CheckGameStatus();  // Verifica el estado del juego después de que la IA realiza un movimiento
 
-                // Cambiar de turno nuevamente para que el jugador pueda jugar
-                isPlayerTurn = true;
-                Debug.WriteLine("Es el turno del jugador.");
+                    // Cambiar de turno nuevamente para que el jugador pueda jugar
+                    isPlayerTurn = true;
+                    Debug.WriteLine("Es el turno del jugador.");
+                }
             }
         }
+
 
         private void CheckGameStatus()
         {
@@ -276,11 +341,13 @@ namespace ChessUI
             {
                 MessageBox.Show(isPlayerTurn ? "¡Has ganado por jaque mate!" : "La IA ha ganado por jaque mate");
                 Debug.WriteLine("Jaque mate.");
+                EndGame(isPlayerTurn ? "¡Has ganado por jaque mate!" : "La IA ha ganado por jaque mate");
             }
             else if (gameStateManager.IsStalemate(isPlayerTurn))
             {
                 MessageBox.Show("El juego ha terminado en tablas");
                 Debug.WriteLine("Tablas.");
+                EndGame("El juego ha terminado en tablas.");
             }
             else if (gameStateManager.IsCheck(isPlayerTurn))
             {
@@ -288,6 +355,52 @@ namespace ChessUI
                 Debug.WriteLine("Jaque.");
             }
         }
+
+
+        private void EndGame(string message)
+        {
+            // Mostrar mensaje de jaque mate o tablas
+            MessageBox.Show(message);
+            Debug.WriteLine($"Fin del juego: {message}");
+
+            // Crear y mostrar el botón de reinicio si no existe ya
+            ShowRestartButton();
+        }
+
+        private void ShowRestartButton()
+        {
+            Button restartButton = new Button
+            {
+                Text = "Reiniciar Partida",
+                Size = new Size(150, 40),
+                Location = new Point((ClientSize.Width - 150) / 2, (ClientSize.Height - 40) / 2)  // Centramos el botón
+            };
+
+            restartButton.Click += RestartGame;  // Conectar el botón al método de reinicio
+
+            Controls.Add(restartButton);
+            restartButton.BringToFront();  // Asegurarse de que el botón esté visible
+        }
+
+        private void RestartGame(object? sender, EventArgs e)
+        {
+            // Limpiar el tablero y reiniciar las piezas
+            board = new Board();
+            gameStateManager = new GameStateManager(board);
+            chessAI = new ChessAI(board, gameStateManager);
+
+            // Limpiar las gráficas y reinicializar
+            Controls.Clear();
+            InitializeComponent();
+            InitializeBoard();
+            PlaceInitialPieces();
+            UpdateBoardGraphics();
+
+            isPlayerTurn = true;  // Comenzar con el turno del jugador
+            selectedPosition = null;  // Limpiar selección
+            Debug.WriteLine("Partida reiniciada.");
+        }
+
 
         private void UpdateBoardGraphics()
         {
