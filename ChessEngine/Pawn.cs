@@ -54,6 +54,7 @@ namespace ChessEngine
         }
 
 
+
         public override void AfterMove()
         {
             hasMoved = true;  // Indicar que el peón ha sido movido

@@ -40,6 +40,7 @@ namespace ChessEngine
         }
 
 
+
         // Mover una pieza de una posición a otra
         public Piece? MovePiece(int startRow, int startCol, int endRow, int endCol)
         {
@@ -64,35 +65,34 @@ namespace ChessEngine
 
             Debug.WriteLine($"Pieza seleccionada: {pieceToMove.PieceType} en posición de origen ({startRow}, {startCol})");
 
-            // Verificar si la posición final está ocupada por una pieza enemiga
             Piece? capturedPiece = GetPieceAtPosition(endRow, endCol);
             if (capturedPiece != null)
             {
-                Debug.WriteLine($"Pieza capturada: {capturedPiece.PieceType} en ({endRow}, {endCol})");
+                Debug.WriteLine($"Capturando pieza enemiga: {capturedPiece.PieceType} en ({endRow}, {endCol})");
+                Grid[endRow, endCol] = null;  // Eliminar la pieza enemiga capturada
             }
 
-            // Mover la pieza sin actualizar su posición aún (verificaremos después)
-            Grid[startRow, startCol] = null;  // Eliminar de la posición original
-            Grid[endRow, endCol] = pieceToMove;  // Colocar en la nueva posición (sin actualizar CurrentPosition aún)
-
-            Debug.WriteLine($"Pieza {pieceToMove.PieceType} movida a la nueva posición ({endRow}, {endCol})");
+            // Mover la pieza
+            Grid[startRow, startCol] = null;  // Eliminar la pieza de la posición original
+            PlacePiece(pieceToMove, endRow, endCol);  // Colocar la pieza en la nueva posición
+            pieceToMove.CurrentPosition = endPosition;  // Actualizar la posición actual
 
             // Verificar si la pieza es un peón que ha llegado a la fila de promoción
-            if (pieceToMove is Pawn &&
-                ((pieceToMove.IsWhite && endRow == 7) || (!pieceToMove.IsWhite && endRow == 0)))
+            if (pieceToMove is Pawn pawn)
             {
-                Debug.WriteLine($"Peón llegando a fila de promoción: {endRow}. Preparando promoción.");
+                // Solo promocionar si la pieza llega a la fila 7 (blanca) o 0 (negra)
+                if ((pawn.IsWhite && endRow == 7) || (!pawn.IsWhite && endRow == 0))
+                {
+                    Debug.WriteLine($"Peón llegando a fila de promoción: {endRow}. Preparando promoción.");
+                    pawn.Promote(this, endPosition);  // Promocionar a reina
+                }
+                else
+                {
+                    Debug.WriteLine($"Peón movido pero no llegó a la fila de promoción: {endRow}");
+                }
+            }
 
-                // Actualizamos la posición del peón justo antes de promocionarlo
-                pieceToMove.CurrentPosition = endPosition;  // Actualizar la posición actual antes de promocionar
-                ((Pawn)pieceToMove).Promote(this, endPosition);  // Promocionar a reina
-            }
-            else
-            {
-                // Si no es un peón en promoción, actualizamos la posición después del movimiento
-                pieceToMove.CurrentPosition = endPosition;
-                Debug.WriteLine($"Pieza {pieceToMove.PieceType} movida a la nueva posición ({endRow}, {endCol}) sin promoción.");
-            }
+            Debug.WriteLine($"Pieza {pieceToMove.PieceType} movida a la nueva posición ({endRow}, {endCol}).");
 
             return capturedPiece;  // Retornar la pieza capturada si existe
         }

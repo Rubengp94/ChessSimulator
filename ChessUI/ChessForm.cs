@@ -168,8 +168,6 @@ namespace ChessUI
                 if (esMovimientoLegal)
                 {
                     Piece? capturedPiece = board.MovePiece(selectedPosition.Row, selectedPosition.Column, row, col);
-
-                    // Solo actualizar gráficos después de que el movimiento esté completo y verificado
                     UpdateBoardGraphics();
 
                     selectedPosition = null;

@@ -56,10 +56,10 @@ namespace ChessEngine
                 {
                     if (board.IsPositionOccupiedByEnemyPiece(newPos, IsWhite))
                     {
-                        moves.Add(new Move(CurrentPosition, newPos));
+                        moves.Add(new Move(CurrentPosition, newPos));  // Agregar movimiento de captura
                         Console.WriteLine($"Movimiento de captura válido hacia {newPos.Row}, {newPos.Column}");
                     }
-                    break;  // Se detiene el movimiento si encuentra una pieza.
+                    break;  // Se detiene el movimiento si encuentra una pieza, amiga o enemiga
                 }
 
                 moves.Add(new Move(CurrentPosition, newPos));
@@ -71,6 +71,7 @@ namespace ChessEngine
 
             return moves;
         }
+
 
 
         // Método para obtener movimientos en "L" (Caballo)

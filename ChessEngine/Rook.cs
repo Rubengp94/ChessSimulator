@@ -21,17 +21,21 @@ namespace ChessEngine
                 int newCol = CurrentPosition.Column + movement.Item2;
                 Position newPosition = new Position(newRow, newCol);
 
-                // Mientras la posición sea válida y no esté ocupada por piezas amigas
-                while (board.IsPositionValid(newPosition) && !board.IsPositionOccupied(newPosition))
+                // Mientras la posición sea válida
+                while (board.IsPositionValid(newPosition))
                 {
-                    validMoves.Add(new Move(CurrentPosition, newPosition));
-
-                    // Si la posición está ocupada por una pieza enemiga, capturarla y detener el movimiento
-                    if (board.IsPositionOccupiedByEnemyPiece(newPosition, IsWhite))
+                    if (board.IsPositionOccupied(newPosition))
                     {
-                        validMoves.Add(new Move(CurrentPosition, newPosition));
-                        break;
+                        // Si está ocupada por una pieza enemiga, capturarla
+                        if (board.IsPositionOccupiedByEnemyPiece(newPosition, IsWhite))
+                        {
+                            validMoves.Add(new Move(CurrentPosition, newPosition));  // Movimiento de captura
+                        }
+                        break;  // Detener el movimiento cuando hay una pieza, amiga o enemiga
                     }
+
+                    // Agregar movimientos válidos en la trayectoria libre
+                    validMoves.Add(new Move(CurrentPosition, newPosition));
 
                     // Continuar moviéndose en la misma dirección
                     newRow += movement.Item1;
@@ -42,6 +46,7 @@ namespace ChessEngine
 
             return validMoves;
         }
+
     }
 }
 
