@@ -64,11 +64,18 @@ namespace ChessEngine
 
             Debug.WriteLine($"Pieza seleccionada: {pieceToMove.PieceType} en posición de origen ({startRow}, {startCol})");
 
-            // Movimiento regular, sin promocionar aún
+            // Verificar si la posición final está ocupada por una pieza enemiga
             Piece? capturedPiece = GetPieceAtPosition(endRow, endCol);
-            Grid[startRow, startCol] = null;  // Eliminar la pieza de la posición original
-            PlacePiece(pieceToMove, endRow, endCol);  // Colocar la pieza en la nueva posición
-            pieceToMove.CurrentPosition = endPosition;  // Actualizar la posición actual
+            if (capturedPiece != null)
+            {
+                Debug.WriteLine($"Pieza capturada: {capturedPiece.PieceType} en ({endRow}, {endCol})");
+            }
+
+            // Mover la pieza sin actualizar su posición aún (verificaremos después)
+            Grid[startRow, startCol] = null;  // Eliminar de la posición original
+            Grid[endRow, endCol] = pieceToMove;  // Colocar en la nueva posición (sin actualizar CurrentPosition aún)
+
+            Debug.WriteLine($"Pieza {pieceToMove.PieceType} movida a la nueva posición ({endRow}, {endCol})");
 
             // Verificar si la pieza es un peón que ha llegado a la fila de promoción
             if (pieceToMove is Pawn &&
@@ -76,17 +83,19 @@ namespace ChessEngine
             {
                 Debug.WriteLine($"Peón llegando a fila de promoción: {endRow}. Preparando promoción.");
 
-                // Promocionar a reina usando el método `Promote` del peón
-                ((Pawn)pieceToMove).Promote(this, endPosition);
+                // Actualizamos la posición del peón justo antes de promocionarlo
+                pieceToMove.CurrentPosition = endPosition;  // Actualizar la posición actual antes de promocionar
+                ((Pawn)pieceToMove).Promote(this, endPosition);  // Promocionar a reina
             }
             else
             {
+                // Si no es un peón en promoción, actualizamos la posición después del movimiento
+                pieceToMove.CurrentPosition = endPosition;
                 Debug.WriteLine($"Pieza {pieceToMove.PieceType} movida a la nueva posición ({endRow}, {endCol}) sin promoción.");
             }
 
             return capturedPiece;  // Retornar la pieza capturada si existe
         }
-
 
 
 
