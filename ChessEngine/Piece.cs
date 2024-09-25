@@ -15,6 +15,7 @@ namespace ChessEngine
             // El método puede ser sobrescrito por piezas específicas si es necesario
         }
 
+
         public virtual void AfterMoveUndo()
         {
             // En general, no hay nada que revertir para la mayoría de las piezas,

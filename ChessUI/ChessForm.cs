@@ -113,19 +113,27 @@ namespace ChessUI
 
         private void Button_Click(object? sender, EventArgs e)
         {
+            Debug.WriteLine("Button_Click: Se ha hecho clic en un botón.");
+
             Button? clickedButton = sender as Button;
-            if (clickedButton == null) return;
+            if (clickedButton == null)
+            {
+                Debug.WriteLine("Button_Click: El botón clickeado es nulo.");
+                return;
+            }
 
             int row = clickedButton.Location.Y / 60;
             int col = clickedButton.Location.X / 60;
 
-            Debug.WriteLine($"Botón presionado: ({row}, {col})");
+            Debug.WriteLine($"Button_Click: Coordenadas del botón clickeado - Fila: {row}, Columna: {col}");
 
             if (selectedPosition == null)
             {
+                Debug.WriteLine("Button_Click: No hay ninguna posición seleccionada previamente.");
+
                 if (!isPlayerTurn)
                 {
-                    Debug.WriteLine("No es el turno del jugador.");
+                    Debug.WriteLine("Button_Click: No es el turno del jugador.");
                     return;
                 }
 
@@ -133,46 +141,50 @@ namespace ChessUI
                 if (piece != null && piece.IsWhite == isPlayerTurn)
                 {
                     selectedPosition = new Position(row, col);
+                    Debug.WriteLine($"Button_Click: Pieza seleccionada: {piece.PieceType} en ({row}, {col})");
                     HighlightSelectedPiece(selectedPosition);
-
-                    Debug.WriteLine($"Pieza seleccionada: {piece.PieceType} en ({row}, {col})");
+                }
+                else
+                {
+                    Debug.WriteLine("Button_Click: No se seleccionó ninguna pieza válida.");
                 }
             }
             else
             {
-                Debug.WriteLine($"Intentando mover de ({selectedPosition.Row}, {selectedPosition.Column}) a ({row}, {col})");
+                Debug.WriteLine($"Button_Click: Intentando mover de ({selectedPosition.Row}, {selectedPosition.Column}) a ({row}, {col})");
 
-                // Validar posiciones antes de mover usando IsPositionValid
                 Position startPosition = new Position(selectedPosition.Row, selectedPosition.Column);
                 Position endPosition = new Position(row, col);
 
                 if (!board.IsPositionValid(startPosition) || !board.IsPositionValid(endPosition))
                 {
-                    Debug.WriteLine($"Posición inválida: ({selectedPosition.Row}, {selectedPosition.Column}) a ({row}, {col})");
+                    Debug.WriteLine("Button_Click: Una de las posiciones es inválida.");
                     return;
                 }
 
                 bool esMovimientoLegal = EvaluarMovimiento(selectedPosition.Row, selectedPosition.Column, row, col);
+                Debug.WriteLine($"Button_Click: El movimiento es {(esMovimientoLegal ? "legal" : "ilegal")}.");
 
                 if (esMovimientoLegal)
                 {
-                    board.MovePiece(selectedPosition.Row, selectedPosition.Column, row, col);
+                    Piece? capturedPiece = board.MovePiece(selectedPosition.Row, selectedPosition.Column, row, col);
                     UpdateBoardGraphics();
+
                     selectedPosition = null;
-
-                    Debug.WriteLine("Movimiento realizado");
-
                     CheckGameStatus();
 
+                    Debug.WriteLine("Button_Click: Turno del jugador terminado, pasando a la IA.");
                     isPlayerTurn = false;
-                    MakeAIMove();
+                    MakeAIMove();  // Pasar el turno a la IA
                 }
                 else
                 {
-                    Debug.WriteLine("Movimiento ilegal, intente otra opción.");
+                    Debug.WriteLine("Button_Click: Movimiento ilegal, intente otra opción.");
                 }
             }
         }
+
+
 
 
 
@@ -309,6 +321,7 @@ namespace ChessUI
                 }
             }
         }
+
 
         private void HighlightSelectedPiece(Position position)
         {

@@ -36,7 +36,9 @@ namespace ChessEngine
         {
             Debug.WriteLine($"Colocando {piece.PieceType} en ({row}, {col})");
             Grid[row, col] = piece;  // Coloca la pieza en la posición
+            piece.CurrentPosition = new Position(row, col);  // Asegúrate de actualizar la posición de la pieza
         }
+
 
         // Mover una pieza de una posición a otra
         public Piece? MovePiece(int startRow, int startCol, int endRow, int endCol)
@@ -60,17 +62,33 @@ namespace ChessEngine
                 return null;
             }
 
-            Piece? capturedPiece = GetPieceAtPosition(endRow, endCol);
+            Debug.WriteLine($"Pieza seleccionada: {pieceToMove.PieceType} en posición de origen ({startRow}, {startCol})");
 
-            // Movemos la pieza
+            // Movimiento regular, sin promocionar aún
+            Piece? capturedPiece = GetPieceAtPosition(endRow, endCol);
             Grid[startRow, startCol] = null;  // Eliminar la pieza de la posición original
-            Grid[endRow, endCol] = pieceToMove;  // Colocar la pieza en la nueva posición
+            PlacePiece(pieceToMove, endRow, endCol);  // Colocar la pieza en la nueva posición
             pieceToMove.CurrentPosition = endPosition;  // Actualizar la posición actual
 
-            Debug.WriteLine($"Pieza {pieceToMove.PieceType} movida a la nueva posición ({endRow}, {endCol})");
+            // Verificar si la pieza es un peón que ha llegado a la fila de promoción
+            if (pieceToMove is Pawn &&
+                ((pieceToMove.IsWhite && endRow == 7) || (!pieceToMove.IsWhite && endRow == 0)))
+            {
+                Debug.WriteLine($"Peón llegando a fila de promoción: {endRow}. Preparando promoción.");
+
+                // Promocionar a reina usando el método `Promote` del peón
+                ((Pawn)pieceToMove).Promote(this, endPosition);
+            }
+            else
+            {
+                Debug.WriteLine($"Pieza {pieceToMove.PieceType} movida a la nueva posición ({endRow}, {endCol}) sin promoción.");
+            }
 
             return capturedPiece;  // Retornar la pieza capturada si existe
         }
+
+
+
 
 
 

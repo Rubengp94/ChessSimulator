@@ -6,7 +6,7 @@ namespace ChessEngine
 {
     public class ChessAI
     {
-        private const int MaxDepth = 15;  // Mantener la profundidad para una evaluación más precisa
+        private const int MaxDepth = 3;  // Mantener la profundidad para una evaluación más precisa
         private Board board;
         private GameStateManager gameStateManager;
 
