@@ -30,7 +30,6 @@ namespace ChessEngine
             // Ordenar los movimientos, priorizando las capturas
             allMoves = SortMovesBySignificance(allMoves);
 
-            // Revisamos todos los movimientos válidos generados por la IA
             foreach (var move in allMoves)
             {
                 Piece piece = board.GetPieceAtPosition(move.Start.Row, move.Start.Column);
@@ -44,12 +43,27 @@ namespace ChessEngine
 
                 // Mover la pieza temporalmente
                 Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+
+                // Simular promoción solo si es un peón negro y está moviéndose a la fila 0 (no antes)
+                Piece? promotedPiece = null;
+                Pawn? pawn = piece as Pawn;
+                bool promotionHappened = false;
+
+                // Verificar promoción solo para el movimiento final, no en simulaciones intermedias
+                if (pawn != null && !pawn.IsWhite && move.End.Row == 0)
+                {
+                    promotedPiece = new Queen(pawn.IsWhite, move.End);  // Simulamos la promoción a reina
+                    board.PlacePiece(promotedPiece, move.End.Row, move.End.Column);
+                    promotionHappened = true;
+                    Debug.WriteLine($"Simulando promoción temporal de peón negro a reina en ({move.End.Row}, {move.End.Column})");
+                }
+
                 piece.AfterMove();  // Actualizar el estado de la pieza si es necesario
 
                 // Evaluar el movimiento usando Minimax con Quiescence Search
                 int moveScore = QuiescenceSearch(MaxDepth, int.MinValue, int.MaxValue, !isWhite);
 
-                // Deshacer el movimiento
+                // Deshacer el movimiento (revertir la simulación)
                 board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
                 piece.AfterMoveUndo();  // Revertir el estado de `hasMoved`
 
@@ -57,6 +71,13 @@ namespace ChessEngine
                 if (capturedPiece != null)
                 {
                     board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
+                }
+
+                // Revertir la promoción temporal si se había promovido
+                if (promotionHappened)
+                {
+                    board.PlacePiece(pawn, move.End.Row, move.End.Column);  // Volver a colocar el peón
+                    Debug.WriteLine($"Revirtiendo la promoción temporal de la reina a peón en ({move.End.Row}, {move.End.Column})");
                 }
 
                 // Añadir el valor de la pieza capturada al puntaje
@@ -82,6 +103,7 @@ namespace ChessEngine
 
             return bestMove;
         }
+
 
         // Filtrar movimientos que dejan al rey en jaque
         private List<Move> FilterOutMovesThatLeaveInCheck(List<Move> moves, bool isWhite)
@@ -112,6 +134,7 @@ namespace ChessEngine
 
             return safeMoves;
         }
+
 
         internal int QuiescenceSearch(int depth, int alpha, int beta, bool isMaximizingPlayer)
         {
@@ -169,28 +192,29 @@ namespace ChessEngine
                     Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
                     piece.AfterMove();  // Actualizar el estado de movimiento
 
+                    // Simular promoción solo en el movimiento final
+                    Pawn? pawn = piece as Pawn;
+                    if (pawn != null && !pawn.IsWhite && move.End.Row == 0)
+                    {
+                        board.PlacePiece(new Queen(false, move.End), move.End.Row, move.End.Column);
+                    }
+
                     int eval = Minimax(depth - 1, alpha, beta, false);
 
                     // Deshacer el movimiento
                     board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
                     piece.AfterMoveUndo();  // Revertir estado de `hasMoved`
 
+                    // Revertir promoción de peones en simulaciones
+                    if (pawn != null && move.End.Row == 0)
+                    {
+                        board.PlacePiece(pawn, move.End.Row, move.End.Column);  // Revertir promoción temporal
+                    }
+
                     // Restaurar la pieza capturada
                     if (capturedPiece != null)
                     {
                         board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
-                    }
-
-                    // Si está en jaque, priorizamos movimientos que lo saquen del jaque
-                    if (isInCheck && !gameStateManager.IsCheck(isMaximizingPlayer))
-                    {
-                        eval += 1000;  // Bonificación por salir del jaque
-                    }
-
-                    // Priorizar capturas significativas
-                    if (capturedPiece != null)
-                    {
-                        eval += GetPieceValue(capturedPiece);
                     }
 
                     maxEval = Math.Max(maxEval, eval);
@@ -211,28 +235,29 @@ namespace ChessEngine
                     Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
                     piece.AfterMove();  // Actualizar el estado de movimiento
 
+                    // Simular promoción solo en el movimiento final
+                    Pawn? pawn = piece as Pawn;
+                    if (pawn != null && !pawn.IsWhite && move.End.Row == 0)
+                    {
+                        board.PlacePiece(new Queen(false, move.End), move.End.Row, move.End.Column);
+                    }
+
                     int eval = Minimax(depth - 1, alpha, beta, true);
 
                     // Deshacer el movimiento
                     board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
                     piece.AfterMoveUndo();  // Revertir estado de `hasMoved`
 
+                    // Revertir promoción de peones en simulaciones
+                    if (pawn != null && move.End.Row == 0)
+                    {
+                        board.PlacePiece(pawn, move.End.Row, move.End.Column);  // Revertir promoción temporal
+                    }
+
                     // Restaurar la pieza capturada
                     if (capturedPiece != null)
                     {
                         board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
-                    }
-
-                    // Si está en jaque, priorizamos movimientos que lo saquen del jaque
-                    if (isInCheck && !gameStateManager.IsCheck(isMaximizingPlayer))
-                    {
-                        eval -= 1000;  // Penalización por permanecer en jaque
-                    }
-
-                    // Penalizar la pérdida de piezas importantes
-                    if (capturedPiece != null)
-                    {
-                        eval -= GetPieceValue(capturedPiece);
                     }
 
                     minEval = Math.Min(minEval, eval);
@@ -242,6 +267,7 @@ namespace ChessEngine
                 return minEval;
             }
         }
+
 
         internal int EvaluateBoard()
         {

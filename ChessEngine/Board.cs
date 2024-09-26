@@ -34,9 +34,14 @@ namespace ChessEngine
         // Colocar una pieza en una posición específica utilizando una referencia
         public void PlacePiece(Piece piece, int row, int col)
         {
-            Debug.WriteLine($"Colocando {piece.PieceType} en ({row}, {col})");
+            Piece? existingPiece = GetPieceAtPosition(row, col);
+            if (existingPiece != null)
+            {
+                Debug.WriteLine($"Advertencia: Sobrescribiendo {existingPiece.PieceType} en la posición ({row}, {col}) con {piece.PieceType}.");
+            }
+
             Grid[row, col] = piece;  // Coloca la pieza en la posición
-            piece.CurrentPosition = new Position(row, col);  // Asegúrate de actualizar la posición de la pieza
+            piece.CurrentPosition = new Position(row, col);  // Actualizar la posición de la pieza
         }
 
 
@@ -80,7 +85,7 @@ namespace ChessEngine
             // Verificar si la pieza es un peón que ha llegado a la fila de promoción
             if (pieceToMove is Pawn pawn)
             {
-                // Solo promocionar si la pieza llega a la fila 7 (blanca) o 0 (negra)
+                // Solo promocionar si la pieza llega a la fila 7 (para blancas) o fila 0 (para negras)
                 if ((pawn.IsWhite && endRow == 7) || (!pawn.IsWhite && endRow == 0))
                 {
                     Debug.WriteLine($"Peón llegando a fila de promoción: {endRow}. Preparando promoción.");
@@ -96,8 +101,6 @@ namespace ChessEngine
 
             return capturedPiece;  // Retornar la pieza capturada si existe
         }
-
-
 
 
 
