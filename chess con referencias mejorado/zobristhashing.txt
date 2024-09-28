@@ -1,0 +1,84 @@
+using System;
+
+namespace ChessEngine
+{
+    public class ZobristHashing
+    {
+        private ulong[,] zobristTable;  // Matriz para almacenar los valores de hash
+        private ulong zobristTurn;  // Valor de hash para el turno (blancas o negras)
+        private Random random;
+
+        public ZobristHashing()
+        {
+            zobristTable = new ulong[64, 12];  // 64 posiciones en el tablero, 12 tipos de piezas
+            random = new Random();
+            InitializeZobristTable();
+            zobristTurn = GenerateRandomUlong();  // Hash para el turno
+        }
+
+        // Inicializa la tabla de hash Zobrist con valores aleatorios
+        private void InitializeZobristTable()
+        {
+            for (int i = 0; i < 64; i++)  // 64 posiciones en el tablero
+            {
+                for (int j = 0; j < 12; j++)  // 12 tipos de piezas (6 por color: peón, torre, caballo, alfil, dama, rey)
+                {
+                    zobristTable[i, j] = GenerateRandomUlong();
+                }
+            }
+        }
+
+        // Genera un número ulong aleatorio
+        private ulong GenerateRandomUlong()
+        {
+            byte[] buffer = new byte[8];
+            random.NextBytes(buffer);
+            return BitConverter.ToUInt64(buffer, 0);
+        }
+
+        public ulong CalculateHash(Board board, bool isWhiteTurn)
+        {
+            ulong hash = 0;
+
+            for (int row = 0; row < 8; row++)
+            {
+                for (int col = 0; col < 8; col++)
+                {
+                    Piece? piece = board.GetPieceAtPosition(row, col);
+                    if (piece != null)
+                    {
+                        int pieceIndex = GetPieceIndex(piece);
+                        int boardIndex = row * 8 + col;
+                        hash ^= zobristTable[boardIndex, pieceIndex];
+                    }
+                }
+            }
+
+            // Añadir el valor de hash para el turno
+            if (isWhiteTurn)
+            {
+                hash ^= zobristTurn;
+            }
+
+            return hash;
+        }
+
+
+        // Obtiene el índice de la pieza para el hash Zobrist
+        private int GetPieceIndex(Piece piece)
+        {
+            int typeIndex = piece.PieceType switch
+            {
+                "Pawn" => 0,
+                "Rook" => 1,
+                "Knight" => 2,
+                "Bishop" => 3,
+                "Queen" => 4,
+                "King" => 5,
+                _ => throw new ArgumentException("Tipo de pieza desconocido")
+            };
+
+            return piece.IsWhite ? typeIndex : typeIndex + 6;  // 6 tipos de piezas por color
+        }
+    }
+}

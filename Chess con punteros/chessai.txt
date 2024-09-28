@@ -1,0 +1,393 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+
+namespace ChessEngine
+{
+    public class ChessAI
+    {
+        private const int MaxDepth = 3;  // Mantener la profundidad para una evaluación más precisa
+        private Board board;
+        private GameStateManager gameStateManager;
+        private SimulationAI simulationAI;
+
+        public ChessAI(Board board, GameStateManager gameStateManager)
+        {
+            this.board = board;
+            this.gameStateManager = gameStateManager;
+            this.simulationAI = new SimulationAI(this);
+        }
+
+        public unsafe Move GetBestMove(bool isWhite)
+        {
+            int bestScore = int.MinValue;
+            Move bestMove = null;
+
+            // Obtener todos los movimientos válidos
+            List<Move> allMoves = GetAllValidMoves(isWhite);
+            Debug.WriteLine($"Total de movimientos válidos para {(isWhite ? "blancas" : "negras")}: {allMoves.Count}");
+
+            // Filtrar los movimientos que saquen del jaque
+            allMoves = FilterOutMovesThatLeaveInCheck(allMoves, isWhite);
+
+            // Ordenar los movimientos, priorizando las capturas
+            allMoves = SortMovesBySignificance(allMoves);
+
+            // Crear un tablero simulado para acelerar las evaluaciones rápidas solo una vez
+            SimulationAI.SimulatedBoard* simulatedBoard = simulationAI.CreateSimulatedBoardFromRealBoard(board);
+
+            foreach (var move in allMoves)
+            {
+                Piece piece = board.GetPieceAtPosition(move.Start.Row, move.Start.Column);
+                if (piece == null)
+                {
+                    Debug.WriteLine($"Error: No se encontró pieza en la posición ({move.Start.Row}, {move.Start.Column})");
+                    continue;
+                }
+
+                Debug.WriteLine($"Evaluando movimiento de {piece.PieceType} desde ({move.Start.Row}, {move.Start.Column}) a ({move.End.Row}, {move.End.Column})");
+
+                // Guardar el valor de la pieza capturada en el tablero simulado
+                int capturedPieceValue = simulatedBoard->board[move.End.Row * 8 + move.End.Column];
+
+                // Aplicar el movimiento en el tablero simulado
+                simulationAI.ApplyMove(simulatedBoard, move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+
+                // Simular promoción si es un peón negro que llega a la fila 0
+                Piece? promotedPiece = null;
+                Pawn? pawn = piece as Pawn;
+                bool promotionHappened = false;
+                if (pawn != null && !pawn.IsWhite && move.End.Row == 0)
+                {
+                    promotedPiece = new Queen(pawn.IsWhite, move.End);
+                    board.PlacePiece(promotedPiece, move.End.Row, move.End.Column);
+                    promotionHappened = true;
+                    Debug.WriteLine($"Simulando promoción temporal de peón negro a reina en ({move.End.Row}, {move.End.Column})");
+                }
+
+                piece.AfterMove();  // Actualizar el estado de la pieza si es necesario
+
+                // Evaluar el movimiento usando Minimax con Quiescence Search
+                int moveScore = Minimax(MaxDepth - 1, int.MinValue, int.MaxValue, !isWhite);
+
+                // Revertir el movimiento en el tablero simulado
+                simulationAI.RevertMove(simulatedBoard, move.Start.Row, move.Start.Column, move.End.Row, move.End.Column, capturedPieceValue);
+
+                piece.AfterMoveUndo();  // Revertir el estado de la pieza en el tablero real
+
+                // Revertir la promoción temporal si ocurrió
+                if (promotionHappened)
+                {
+                    board.PlacePiece(pawn, move.End.Row, move.End.Column);
+                    Debug.WriteLine($"Revirtiendo la promoción temporal de la reina a peón en ({move.End.Row}, {move.End.Column})");
+                }
+
+                // Añadir el valor de la pieza capturada al puntaje
+                if (capturedPieceValue != 0)
+                {
+                    moveScore += capturedPieceValue;
+                    Debug.WriteLine($"Movimiento de captura, aumentando puntaje en {capturedPieceValue}");
+                }
+
+                // Actualizar el mejor movimiento si encontramos un mejor puntaje
+                if (moveScore > bestScore)
+                {
+                    bestScore = moveScore;
+                    bestMove = move;
+                    Debug.WriteLine($"Nuevo mejor movimiento: {piece.PieceType} desde ({move.Start.Row}, {move.Start.Column}) a ({move.End.Row}, {move.End.Column}) con score {moveScore}");
+                }
+            }
+
+            if (bestMove == null)
+            {
+                Debug.WriteLine("Error: No se encontró ningún movimiento válido para la IA.");
+            }
+
+            return bestMove;
+        }
+
+
+
+        // Métodos como Minimax, QuiescenceSearch, EvaluateBoard, etc. se mantienen igual y se invocan desde GetBestMove.
+        // QuiescenceSearch se utiliza para optimizaciones adicionales en el análisis de movimientos.
+
+
+        // Filtrar movimientos que dejan al rey en jaque
+        private List<Move> FilterOutMovesThatLeaveInCheck(List<Move> moves, bool isWhite)
+        {
+            List<Move> safeMoves = new List<Move>();
+
+            foreach (var move in moves)
+            {
+                // Mover la pieza temporalmente
+                Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+
+                // Comprobar si el rey sigue en jaque después del movimiento
+                bool isStillInCheck = gameStateManager.IsCheck(isWhite);
+
+                // Deshacer el movimiento
+                board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                if (capturedPiece != null)
+                {
+                    board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
+                }
+
+                // Solo agregar el movimiento si no deja al rey en jaque
+                if (!isStillInCheck)
+                {
+                    safeMoves.Add(move);
+                }
+            }
+
+            return safeMoves;
+        }
+
+
+        internal int QuiescenceSearch(int alpha, int beta, bool isMaximizingPlayer)
+        {
+            // Evaluación estática del tablero en su estado actual
+            int eval = EvaluateBoard();
+
+            // Si la evaluación supera beta, se hace poda (beta cutoff)
+            if (eval >= beta) return beta;
+
+            // Si la evaluación mejora alpha, actualizamos alpha
+            if (eval > alpha) alpha = eval;
+
+            // Obtener solo los movimientos de captura
+            List<Move> captureMoves = GetCaptureMoves(isMaximizingPlayer);
+
+            // Si no hay más movimientos de captura, devolver la evaluación actual
+            if (captureMoves.Count == 0) return eval;
+
+            // Explorar todas las capturas
+            foreach (var move in captureMoves)
+            {
+                Piece piece = board.GetPieceAtPosition(move.Start.Row, move.Start.Column);
+                if (piece == null) continue;
+
+                // Mover la pieza temporalmente
+                Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                piece.AfterMove();  // Actualizar el estado de la pieza después del movimiento
+
+                // Llamada recursiva a Quiescence Search
+                int score = -QuiescenceSearch(-beta, -alpha, !isMaximizingPlayer);
+
+                // Deshacer el movimiento
+                board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                piece.AfterMoveUndo();  // Revertir el estado de la pieza
+                if (capturedPiece != null)
+                {
+                    board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);  // Restaurar la pieza capturada
+                }
+
+                // Si el score es mayor o igual a beta, hacer poda
+                if (score >= beta) return beta;
+
+                // Actualizar alpha si encontramos una mejor evaluación
+                if (score > alpha) alpha = score;
+            }
+
+            return alpha;  // Retornar el mejor score encontrado
+        }
+
+
+        internal int Minimax(int depth, int alpha, int beta, bool isMaximizingPlayer)
+        {
+            // Condición base: Si alcanzamos la profundidad máxima o el juego terminó
+            if (depth == 0 || gameStateManager.IsGameOver())
+            {
+                // En lugar de evaluar directamente, usamos Quiescence Search en posiciones límites
+                return QuiescenceSearch(alpha, beta, isMaximizingPlayer);
+            }
+
+            // Obtener todos los movimientos válidos para el jugador actual
+            List<Move> moves = GetAllValidMoves(isMaximizingPlayer);
+            bool isInCheck = gameStateManager.IsCheck(isMaximizingPlayer);  // Verificar si está en jaque
+
+            if (isMaximizingPlayer)
+            {
+                int maxEval = int.MinValue;  // El mejor valor para el jugador maximizado
+
+                foreach (var move in moves)
+                {
+                    Piece piece = board.GetPieceAtPosition(move.Start.Row, move.Start.Column);
+                    if (piece == null) continue;
+
+                    // Mover la pieza temporalmente
+                    Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                    piece.AfterMove();  // Actualizar el estado de movimiento
+
+                    // Llamada recursiva a Minimax para evaluar el siguiente movimiento
+                    int eval = Minimax(depth - 1, alpha, beta, false);  // Cambia a minimizar en la siguiente profundidad
+
+                    // Deshacer el movimiento
+                    board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                    piece.AfterMoveUndo();  // Revertir estado de la pieza
+
+                    // Restaurar la pieza capturada, si la había
+                    if (capturedPiece != null)
+                    {
+                        board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
+                    }
+
+                    // Si está en jaque, priorizamos movimientos que lo saquen del jaque
+                    if (isInCheck && !gameStateManager.IsCheck(isMaximizingPlayer))
+                    {
+                        eval += 1000;  // Bonificación por salir del jaque
+                    }
+
+                    // Priorizar capturas significativas
+                    if (capturedPiece != null)
+                    {
+                        eval += GetPieceValue(capturedPiece);  // Añadir valor de la pieza capturada
+                    }
+
+                    // Actualizar el valor máximo
+                    maxEval = Math.Max(maxEval, eval);
+                    alpha = Math.Max(alpha, eval);
+
+                    // Poda alfa-beta: Si el valor actual supera beta, podemos cortar
+                    if (beta <= alpha) break;
+                }
+
+                return maxEval;
+            }
+            else
+            {
+                int minEval = int.MaxValue;  // El mejor valor para el jugador minimizado
+
+                foreach (var move in moves)
+                {
+                    Piece piece = board.GetPieceAtPosition(move.Start.Row, move.Start.Column);
+                    if (piece == null) continue;
+
+                    // Mover la pieza temporalmente
+                    Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                    piece.AfterMove();  // Actualizar el estado de movimiento
+
+                    // Llamada recursiva a Minimax para evaluar el siguiente movimiento
+                    int eval = Minimax(depth - 1, alpha, beta, true);  // Cambia a maximizar en la siguiente profundidad
+
+                    // Deshacer el movimiento
+                    board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                    piece.AfterMoveUndo();  // Revertir estado de la pieza
+
+                    // Restaurar la pieza capturada, si la había
+                    if (capturedPiece != null)
+                    {
+                        board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
+                    }
+
+                    // Si está en jaque, priorizamos movimientos que lo saquen del jaque
+                    if (isInCheck && !gameStateManager.IsCheck(isMaximizingPlayer))
+                    {
+                        eval -= 1000;  // Penalización por permanecer en jaque
+                    }
+
+                    // Penalizar la pérdida de piezas importantes
+                    if (capturedPiece != null)
+                    {
+                        eval -= GetPieceValue(capturedPiece);  // Restar el valor de la pieza capturada
+                    }
+
+                    // Actualizar el valor mínimo
+                    minEval = Math.Min(minEval, eval);
+                    beta = Math.Min(beta, eval);
+
+                    // Poda alfa-beta: Si el valor actual es menor que alfa, podemos cortar
+                    if (beta <= alpha) break;
+                }
+
+                return minEval;
+            }
+        }
+
+
+
+        internal int EvaluateBoard()
+        {
+            int score = 0;
+            for (int row = 0; row < 8; row++)
+            {
+                for (int col = 0; col < 8; col++)
+                {
+                    Piece? piece = board.GetPieceAtPosition(row, col);
+                    if (piece != null)
+                    {
+                        int pieceValue = GetPieceValue(piece);
+                        score += piece.IsWhite ? pieceValue : -pieceValue;
+
+                        // Penalizar al jugador si está en jaque
+                        if (piece.PieceType == "King" && gameStateManager.IsCheck(piece.IsWhite))
+                        {
+                            score += piece.IsWhite ? -500 : 500;  // Penaliza mucho si el rey está en jaque
+                        }
+                    }
+                }
+            }
+            return score;
+        }
+
+        public int GetPieceValue(Piece piece)
+        {
+            switch (piece.PieceType)
+            {
+                case "Pawn": return 10;
+                case "Knight": return 30;
+                case "Bishop": return 30;
+                case "Rook": return 50;
+                case "Queen": return 90;
+                case "King": return 900;
+                default: return 0;
+            }
+        }
+
+        private List<Move> GetAllValidMoves(bool isWhite)
+        {
+            List<Move> moves = new List<Move>();
+            for (int row = 0; row < 8; row++)
+            {
+                for (int col = 0; col < 8; col++)
+                {
+                    Piece? piece = board.GetPieceAtPosition(row, col);
+                    if (piece != null && piece.IsWhite == isWhite)
+                    {
+                        List<Move> validMoves = piece.GetValidMoves(board);
+                        moves.AddRange(validMoves);
+                    }
+                }
+            }
+            return moves;
+        }
+
+        private List<Move> GetCaptureMoves(bool isWhite)
+        {
+            List<Move> captureMoves = new List<Move>();
+            foreach (var move in GetAllValidMoves(isWhite))
+            {
+                if (board.IsPositionOccupiedByEnemyPiece(move.End, isWhite))
+                {
+                    captureMoves.Add(move);  // Solo capturas
+                }
+            }
+            return captureMoves;
+        }
+
+        private List<Move> SortMovesBySignificance(List<Move> moves)
+        {
+            // Ordenar los movimientos de captura primero (mayor valor primero)
+            moves.Sort((move1, move2) =>
+            {
+                Piece? piece1 = board.GetPieceAtPosition(move1.End.Row, move1.End.Column);
+                Piece? piece2 = board.GetPieceAtPosition(move2.End.Row, move2.End.Column);
+                int value1 = piece1 != null ? GetPieceValue(piece1) : 0;
+                int value2 = piece2 != null ? GetPieceValue(piece2) : 0;
+                return value2.CompareTo(value1);  // Capturas más valiosas primero
+            });
+            return moves;
+        }
+    }
+}
+
+

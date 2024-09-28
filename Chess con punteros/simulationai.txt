@@ -1,0 +1,78 @@
+using System;
+
+namespace ChessEngine
+{
+    public unsafe class SimulationAI
+    {
+        public struct SimulatedBoard
+        {
+            public fixed int board[64];  // Un array fijo de una dimensión con 64 elementos (8x8 tablero)
+        }
+
+        private ChessAI chessAI;
+
+        public SimulationAI(ChessAI chessAI)
+        {
+            this.chessAI = chessAI;
+        }
+
+        // Crear un tablero simulado basado en el tablero real solo una vez
+        public SimulatedBoard* CreateSimulatedBoardFromRealBoard(Board board)
+        {
+            SimulatedBoard* simulatedBoard = stackalloc SimulatedBoard[1]; // Solo una vez
+            InitializeBoardFromReal(simulatedBoard, board);
+            return simulatedBoard;
+        }
+
+        // Inicializar el tablero simulado a partir del real, solo una vez
+        private void InitializeBoardFromReal(SimulatedBoard* simulatedBoard, Board board)
+        {
+            for (int row = 0; row < 8; row++)
+            {
+                for (int col = 0; col < 8; col++)
+                {
+                    Piece? piece = board.GetPieceAtPosition(row, col);
+                    if (piece != null)
+                    {
+                        simulatedBoard->board[row * 8 + col] = chessAI.GetPieceValue(piece);  // Valor de la pieza
+                    }
+                    else
+                    {
+                        simulatedBoard->board[row * 8 + col] = 0;  // Posición vacía
+                    }
+                }
+            }
+        }
+
+        // Aplicar un movimiento incremental sin copiar todo el tablero
+        public void ApplyMove(SimulatedBoard* simulatedBoard, int startRow, int startCol, int endRow, int endCol)
+        {
+            int startIndex = startRow * 8 + startCol;
+            int endIndex = endRow * 8 + endCol;
+
+            simulatedBoard->board[endIndex] = simulatedBoard->board[startIndex];
+            simulatedBoard->board[startIndex] = 0; // Vaciar la casilla de origen
+        }
+
+        // Revertir el movimiento incremental
+        public void RevertMove(SimulatedBoard* simulatedBoard, int startRow, int startCol, int endRow, int endCol, int capturedPieceValue)
+        {
+            int startIndex = startRow * 8 + startCol;
+            int endIndex = endRow * 8 + endCol;
+
+            simulatedBoard->board[startIndex] = simulatedBoard->board[endIndex];  // Restaurar la pieza
+            simulatedBoard->board[endIndex] = capturedPieceValue;  // Restaurar la pieza capturada (si la había)
+        }
+
+        // Método para evaluar el estado del tablero simulado
+        public int EvaluateBoard(SimulatedBoard* simulatedBoard)
+        {
+            int score = 0;
+            for (int i = 0; i < 64; i++)
+            {
+                score += simulatedBoard->board[i];
+            }
+            return score;
+        }
+    }
+}

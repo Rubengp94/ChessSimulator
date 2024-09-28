@@ -1,0 +1,349 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+
+namespace ChessEngine
+{
+    public class ChessAI
+    {
+        private const int MaxDepth = 1;  // Mantener la profundidad para una evaluación más precisa
+        private Board board;
+        private GameStateManager gameStateManager;
+        private Dictionary<ulong, TranspositionEntry> transpositionTable = new Dictionary<ulong, TranspositionEntry>();
+
+        private ZobristHashing zobrist;
+
+        public ChessAI(Board board, GameStateManager gameStateManager)
+        {
+            this.board = board;
+            this.gameStateManager = gameStateManager;
+            this.zobrist = new ZobristHashing();
+        }
+
+        public Move GetBestMove(bool isWhite)
+        {
+            int bestScore = int.MinValue;
+            Move bestMove = null;
+
+            List<Move> allMoves = GetAllValidMoves(isWhite);
+            Debug.WriteLine($"Total de movimientos válidos para {(isWhite ? "blancas" : "negras")}: {allMoves.Count}");
+
+            allMoves = FilterOutMovesThatLeaveInCheck(allMoves, isWhite);
+            allMoves = SortMovesBySignificance(allMoves);
+
+            // Calcular hash del tablero pasando el turno explícitamente
+            ulong boardKey = zobrist.CalculateHash(board, isWhite);
+
+            foreach (var move in allMoves)
+            {
+                Piece piece = board.GetPieceAtPosition(move.Start.Row, move.Start.Column);
+                if (piece == null) continue;
+
+                Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                piece.AfterMove();
+
+                int moveScore = Minimax(MaxDepth, int.MinValue, int.MaxValue, !isWhite);
+
+                board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                piece.AfterMoveUndo();
+                if (capturedPiece != null)
+                {
+                    board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
+                }
+
+                if (moveScore > bestScore)
+                {
+                    bestScore = moveScore;
+                    bestMove = move;
+                }
+            }
+
+            return bestMove;
+        }
+
+
+
+        // Filtrar movimientos que dejan al rey en jaque
+        private List<Move> FilterOutMovesThatLeaveInCheck(List<Move> moves, bool isWhite)
+        {
+            List<Move> safeMoves = new List<Move>();
+
+            foreach (var move in moves)
+            {
+                // Mover la pieza temporalmente
+                Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+
+                // Comprobar si el rey sigue en jaque después del movimiento
+                bool isStillInCheck = gameStateManager.IsCheck(isWhite);
+
+                // Deshacer el movimiento
+                board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                if (capturedPiece != null)
+                {
+                    board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
+                }
+
+                // Solo agregar el movimiento si no deja al rey en jaque
+                if (!isStillInCheck)
+                {
+                    safeMoves.Add(move);
+                }
+            }
+
+            return safeMoves;
+        }
+
+        // Método Minimax combinado con Quiescence Search y tabla de transposición
+        internal int Minimax(int depth, int alpha, int beta, bool isMaximizingPlayer)
+        {
+            // Determinar si es el turno de las blancas
+            bool isWhiteTurn = isMaximizingPlayer;
+
+            // Calcular el hash del tablero con el turno actual
+            ulong boardKey = zobrist.CalculateHash(board, isWhiteTurn);
+
+            if (transpositionTable.TryGetValue(boardKey, out TranspositionEntry entry))
+            {
+                if (entry.Depth >= depth)
+                {
+                    if (entry.Flag == EntryFlag.Exact) return entry.Value;
+                    if (entry.Flag == EntryFlag.LowerBound && entry.Value > alpha) alpha = entry.Value;
+                    if (entry.Flag == EntryFlag.UpperBound && entry.Value < beta) beta = entry.Value;
+                    if (alpha >= beta) return entry.Value;
+                }
+            }
+
+            if (depth == 0 || gameStateManager.IsGameOver())
+            {
+                int eval = QuiescenceSearch(alpha, beta, isMaximizingPlayer);
+                StoreInTranspositionTable(boardKey, eval, depth, alpha, beta);
+                return eval;
+            }
+
+            List<Move> moves = GetAllValidMoves(isMaximizingPlayer);
+
+            if (isMaximizingPlayer)
+            {
+                int maxEval = int.MinValue;
+
+                foreach (var move in moves)
+                {
+                    Piece piece = board.GetPieceAtPosition(move.Start.Row, move.Start.Column);
+                    if (piece == null) continue;
+
+                    Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                    piece.AfterMove();
+
+                    int eval = Minimax(depth - 1, alpha, beta, false);
+
+                    board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                    piece.AfterMoveUndo();
+                    if (capturedPiece != null) board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
+
+                    maxEval = Math.Max(maxEval, eval);
+                    alpha = Math.Max(alpha, eval);
+
+                    if (beta <= alpha) break;
+                }
+
+                StoreInTranspositionTable(boardKey, maxEval, depth, alpha, beta);
+                return maxEval;
+            }
+            else
+            {
+                int minEval = int.MaxValue;
+
+                foreach (var move in moves)
+                {
+                    Piece piece = board.GetPieceAtPosition(move.Start.Row, move.Start.Column);
+                    if (piece == null) continue;
+
+                    Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                    piece.AfterMove();
+
+                    int eval = Minimax(depth - 1, alpha, beta, true);
+
+                    board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                    piece.AfterMoveUndo();
+                    if (capturedPiece != null) board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
+
+                    minEval = Math.Min(minEval, eval);
+                    beta = Math.Min(beta, eval);
+
+                    if (beta <= alpha) break;
+                }
+
+                StoreInTranspositionTable(boardKey, minEval, depth, alpha, beta);
+                return minEval;
+            }
+        }
+
+        internal int QuiescenceSearch(int alpha, int beta, bool isMaximizingPlayer)
+        {
+            int eval = EvaluateBoard();
+
+            if (eval >= beta) return beta;
+            if (eval > alpha) alpha = eval;
+
+            List<Move> captureMoves = GetCaptureMoves(isMaximizingPlayer);
+            if (captureMoves.Count == 0) return eval;
+
+            foreach (var move in captureMoves)
+            {
+                Piece piece = board.GetPieceAtPosition(move.Start.Row, move.Start.Column);
+                if (piece == null) continue;
+
+                Piece? capturedPiece = board.MovePiece(move.Start.Row, move.Start.Column, move.End.Row, move.End.Column);
+                piece.AfterMove();
+
+                int score = -QuiescenceSearch(-beta, -alpha, !isMaximizingPlayer);
+
+                board.MovePiece(move.End.Row, move.End.Column, move.Start.Row, move.Start.Column);
+                piece.AfterMoveUndo();
+                if (capturedPiece != null) board.PlacePiece(capturedPiece, move.End.Row, move.End.Column);
+
+                if (score >= beta) return beta;
+                if (score > alpha) alpha = score;
+            }
+
+            return alpha;
+        }
+
+        // Almacenar evaluaciones en la tabla de transposición
+        private void StoreInTranspositionTable(ulong boardKey, int value, int depth, int alpha, int beta)
+        {
+            EntryFlag flag;
+            if (value <= alpha)
+                flag = EntryFlag.UpperBound;
+            else if (value >= beta)
+                flag = EntryFlag.LowerBound;
+            else
+                flag = EntryFlag.Exact;
+
+            transpositionTable[boardKey] = new TranspositionEntry(value, depth, flag);
+        }
+
+        // Generar una clave única para el tablero actual
+        private string GenerateBoardKey()
+        {
+            string key = "";
+            for (int row = 0; row < 8; row++)
+            {
+                for (int col = 0; col < 8; col++)
+                {
+                    Piece? piece = board.GetPieceAtPosition(row, col);
+                    if (piece != null)
+                    {
+                        key += piece.PieceType + piece.IsWhite + row + col;
+                    }
+                }
+            }
+            return key;
+        }
+
+        private class TranspositionEntry
+        {
+            public int Value;
+            public int Depth;
+            public EntryFlag Flag;
+
+            public TranspositionEntry(int value, int depth, EntryFlag flag)
+            {
+                Value = value;
+                Depth = depth;
+                Flag = flag;
+            }
+        }
+
+        private enum EntryFlag
+        {
+            Exact,      // Valor exacto
+            LowerBound, // Valor mínimo posible
+            UpperBound  // Valor máximo posible
+        }
+
+
+        internal int EvaluateBoard()
+        {
+            int score = 0;
+            for (int row = 0; row < 8; row++)
+            {
+                for (int col = 0; col < 8; col++)
+                {
+                    Piece? piece = board.GetPieceAtPosition(row, col);
+                    if (piece != null)
+                    {
+                        int pieceValue = GetPieceValue(piece);
+                        score += piece.IsWhite ? pieceValue : -pieceValue;
+
+                        // Penalizar al jugador si está en jaque
+                        if (piece.PieceType == "King" && gameStateManager.IsCheck(piece.IsWhite))
+                        {
+                            score += piece.IsWhite ? -500 : 500;  // Penaliza mucho si el rey está en jaque
+                        }
+                    }
+                }
+            }
+            return score;
+        }
+
+        private int GetPieceValue(Piece piece)
+        {
+            switch (piece.PieceType)
+            {
+                case "Pawn": return 10;
+                case "Knight": return 30;
+                case "Bishop": return 30;
+                case "Rook": return 50;
+                case "Queen": return 90;
+                case "King": return 900;
+                default: return 0;
+            }
+        }
+
+        private List<Move> GetAllValidMoves(bool isWhite)
+        {
+            List<Move> moves = new List<Move>();
+            for (int row = 0; row < 8; row++)
+            {
+                for (int col = 0; col < 8; col++)
+                {
+                    Piece? piece = board.GetPieceAtPosition(row, col);
+                    if (piece != null && piece.IsWhite == isWhite)
+                    {
+                        List<Move> validMoves = piece.GetValidMoves(board);
+                        moves.AddRange(validMoves);
+                    }
+                }
+            }
+            return moves;
+        }
+
+        private List<Move> GetCaptureMoves(bool isWhite)
+        {
+            List<Move> captureMoves = new List<Move>();
+            foreach (var move in GetAllValidMoves(isWhite))
+            {
+                if (board.IsPositionOccupiedByEnemyPiece(move.End, isWhite))
+                {
+                    captureMoves.Add(move);  // Solo capturas
+                }
+            }
+            return captureMoves;
+        }
+
+        private List<Move> SortMovesBySignificance(List<Move> moves)
+        {
+            // Ordenar los movimientos de captura primero (mayor valor primero)
+            moves.Sort((move1, move2) =>
+            {
+                Piece? piece1 = board.GetPieceAtPosition(move1.End.Row, move1.End.Column);
+                Piece? piece2 = board.GetPieceAtPosition(move2.End.Row, move2.End.Column);
+                int value1 = piece1 != null ? GetPieceValue(piece1) : 0;
+                int value2 = piece2 != null ? GetPieceValue(piece2) : 0;
+                return value2.CompareTo(value1);  // Capturas más valiosas primero
+            });
+            return moves;
+        }
+    }
+}
